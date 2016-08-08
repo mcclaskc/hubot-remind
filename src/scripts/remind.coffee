@@ -1,21 +1,21 @@
 # Description:
-#   Remind to someone something
+#   Remind someone to something at a given time
 #
 # Commands:
-#   hubot remind to <user> in #s|m|h|d to <something to remind> - remind to someone something in a given time eg 5m for five minutes
-#   hubot what will you remind - Show active reminders
-#   hubot what are your reminders - Show active reminders
-#   hubot forget|rm reminder <id> - Remove a given reminder
+#   hubot remind <user> in #s|m|h|d to <something to remind> - remind to someone something in a given time
+#   hubot remind <user> to <something to remind> in #s|m|h|d - remind to someone something in a given time
+#   hubot reminders|what are your reminders - Show active reminders
+#   hubot forget|rm|remove|delete reminder <id> - Remove a given reminder
 
 cronJob = require('cron').CronJob
 moment = require('moment')
 
 JOBS = {}
+BRAIN_JOBS = [];
 
 createNewJob = (robot, pattern, user, message) ->
   id = Math.floor(Math.random() * 1000000) while !id? || JOBS[id]
-  job = registerNewJob robot, id, pattern, user, message
-  robot.brain.data.things[id] = job.serialize()
+  registerNewJob robot, id, pattern, user, message
   id
 
 registerNewJobFromBrain = (robot, id, pattern, user, message) ->
@@ -25,29 +25,70 @@ registerNewJob = (robot, id, pattern, user, message) ->
   job = new Job(id, pattern, user, message)
   job.start(robot)
   JOBS[id] = job
+  BRAIN_JOBS.push({id: id, pattern: pattern, user: user, message: message})
 
 unregisterJob = (robot, id)->
   if JOBS[id]
     JOBS[id].stop()
-    delete robot.brain.data.things[id]
     delete JOBS[id]
+    foundJobs = BRAIN_JOBS.filter (j) ->
+      j.id == id
+    if foundJobs
+      BRAIN_JOBS.splice(BRAIN_JOBS.indexOf(foundJobs), 1)
+    saveJobs(robot)
     return yes
   no
 
 handleNewJob = (robot, msg, user, pattern, message) ->
-    id = createNewJob robot, pattern, user, message
-    msg.send "Got it! I will remind to #{user.name} at #{pattern}"
+  createNewJob robot, pattern, user, message
+  saveJobs(robot)
+  msg.send "Got it! I will remind #{user.name} at #{pattern}"
+
+
+saveJobs = (robot)->
+  robot.brain.set 'hubot-remind-reminders', BRAIN_JOBS
+  robot.brain.save()
 
 module.exports = (robot) ->
-  robot.brain.data.things or= {}
+  loaded = false
+  respondToCommand = (msg, name, at, time, something) ->
+    if /^me$/i.test(name.trim())
+      users = [msg.message.user]
+    else
+      users = robot.brain.usersForFuzzyName(name)
+
+    if users.length is 1
+      firstLetter = time.substring(0, 1)
+      switch firstLetter
+        when 's' then timeWord = 'second'
+        when 'm' then timeWord = 'minute'
+        when 'h' then timeWord = 'hour'
+        when 'd' then timeWord = 'day'
+
+      handleNewJob robot, msg, users[0], moment().add(at, timeWord).toDate(), something
+    else if users.length > 1
+      msg.send "Be more specific, I know #{users.length} people " +
+          "named like that: #{(user.name for user in users).join(", ")}"
+    else
+      msg.send "#{name}? Never heard of 'em"
 
   # The module is loaded right now
   robot.brain.on 'loaded', ->
-    for own id, job of robot.brain.data.things
-      console.log id
-      registerNewJobFromBrain robot, id, job...
+    if loaded
+      return
+    else
+      loaded = true
+    try
+      thingsToRemind = robot.brain.get('hubot-remind-reminders') || []
+    catch
+      thingsToRemind = []
+    console.log('loaded ' + thingsToRemind.length + ' reminders from brain')
+    currentDate = new Date()
+    thingsToRemind.forEach (thing)->
+      if currentDate < thing.pattern
+        registerNewJobFromBrain robot, thing.id, thing.pattern, thing.user, thing.message
 
-  robot.respond /what (will you remind|are your reminders)/i, (msg) ->
+  robot.respond /(reminders|what are your reminders)/i, (msg) ->
     text = ''
     for id, job of JOBS
       room = job.user.reply_to || job.user.room
@@ -63,37 +104,30 @@ module.exports = (robot) ->
     for id, job of JOBS
       if (reqId == id)
         if unregisterJob(robot, reqId)
-          msg.send "Reminder #{id} sleep with the fishes..."
+          msg.send "Reminder #{id} deleted."
         else
-          msg.send "i can't forget it, maybe i need a headshrinker"
+          msg.send "I can't forget it, maybe I need a headshrinker"
 
-  robot.respond /remind (.*) in (\d+)([s|m|h|d]) to (.*)/i, (msg) ->
+  robot.respond /remind (.*) to (.*) in (\d+)(se?c?o?n?d?|mi?n?u?t?e?s?|ho?u?r?s?|da?y?s?)/i, (msg) ->
+    name = msg.match[1]
+    something = msg.match[2]
+    at = msg.match[3]
+    time = msg.match[4]
+    respondToCommand msg, name, at, time, something
+
+  robot.respond /remind to (.*) in (\d+)(se?c?o?n?d?|mi?n?u?t?e?s?|ho?u?r?s?|da?y?s?)/i, (msg) ->
+    name = 'me'
+    something = msg.match[1]
+    at = msg.match[2]
+    time = msg.match[3]
+    respondToCommand msg, name, at, time, something
+
+  robot.respond /remind (.*) in (\d+)(se?c?o?n?d?|mi?n?u?t?e?s?|ho?u?r?s?|da?y?s?) to (.*)/i, (msg) ->
     name = msg.match[1]
     at = msg.match[2]
     time = msg.match[3]
     something = msg.match[4]
-
-    if /^me$/i.test(name.trim())
-      users = [msg.message.user]
-    else
-      name = name.replace 'to ', ''
-      users = robot.brain.usersForFuzzyName(name)
-
-    if users.length is 1
-      switch time
-        when 's' then timeWord = 'second'
-        when 'm' then timeWord = 'minute'
-        when 'h' then timeWord = 'hour'
-        when 'd' then timeWord = 'day'
-
-      handleNewJob robot, msg, users[0], moment().add(at, timeWord).toDate(), something
-    else if users.length > 1
-      msg.send "Be more specific, I know #{users.length} people " +
-        "named like that: #{(user.name for user in users).join(", ")}"
-    else
-      msg.send "#{name}? Never heard of 'em"
-
-
+    respondToCommand msg, name, at, time, something
 
 class Job
   constructor: (id, pattern, user, message) ->

@@ -41,4 +41,4 @@ For more information and details, [take a look at the source](src/scripts/remind
 
 ---
 
-This is a GitHub fork from the original [Hubot RememberTo](https://github.com/wdalmut/hubot-rememberto) by [@wdalmut](https://github.com/wdalmut).
+This is a fork from [https://clippings/hubot-remind](https://clippings/hubot-remind).

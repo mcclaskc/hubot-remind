@@ -1,7 +1,7 @@
 {
-  "name": "hubot-remind",
-  "description": "Remind to someone something...",
-  "version": "0.1.4",
+  "name": "hubot-reminders",
+  "description": "Remind someone to something",
+  "version": "0.1.23",
   "main": "./src/index.coffee",
   "devDependencies": {
     "hubot": "^2.8.2"
@@ -12,6 +12,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clippings/hubot-remind.git"
+    "url": "https://github.com/lucasvanhalst/hubot-remind.git"
   }
 }
