@@ -37,7 +37,7 @@ hubot forget <reminder id>
 
 ---
 
-For more information and details, [take a look at the source](src/scripts/remind.coffee]).
+For more information and details, [take a look at the source](src/scripts/remind.coffee).
 
 ---
 
